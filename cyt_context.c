@@ -11,7 +11,7 @@ struct cyt_context
 	ucontext_t ucontext;
 };
 
-struct cyt_context * cyt_context_Create(size_t stack_size, void(*func)(void*), void * arg)
+struct cyt_context * cyt_context_Create(size_t stack_size, context_on_start_t func, void * arg)
 {
 	struct cyt_context * c;
 	char * stack;
@@ -41,8 +41,11 @@ struct cyt_context * cyt_context_Create(size_t stack_size, void(*func)(void*), v
 	c->ucontext.uc_stack.ss_size = stack_size; // set the stack size_t
 	c->ucontext.uc_link = NULL; // no link is set.  if this context is ever returned out of it will crash
 	
-	// make the new context
+	// make the new context ignoring the unfounded error
+	#pragma GCC diagnostic push
+	#pragma GCC diagnostic ignored "-Wincompatible-pointer-types"
 	makecontext(&c->ucontext, func, 1, arg);
+	#pragma GCC diagnostic pop
 	
 	// return the new context
 	return c;
@@ -59,6 +62,12 @@ struct cyt_context * cyt_context_Create(size_t stack_size, void(*func)(void*), v
 	}
 }
 
+void cyt_context_Delete(struct cyt_context *c)
+{
+	free(c->ucontext.uc_stack.ss_sp);
+	free(c);
+}
+
 struct cyt_context * cyt_context_CreateMain()
 {
 	struct cyt_context * c;
@@ -71,7 +80,9 @@ struct cyt_context * cyt_context_CreateMain()
 		return NULL;
 	}
 	
-	cyt_context_SaveContext(c);
+	rv = cyt_context_SaveContext(c);
+	if(rv < 0)
+		free(c);
 	return c;
 }
 
